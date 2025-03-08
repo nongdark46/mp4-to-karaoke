@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Upload Song for Karaoke Processing</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 600px;
+      background: #fff;
+      margin: 50px auto;
+      padding: 20px;
+      border-radius: 5px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    form {
+      display: flex;
+      flex-direction: column;
+    }
+    label {
+      margin-top: 15px;
+      font-weight: bold;
+    }
+    input[type="file"],
+    input[type="text"] {
+      padding: 10px;
+      margin-top: 5px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    button {
+      margin-top: 20px;
+      padding: 10px;
+      background-color: #28a745;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    button:hover {
+      background-color: #218838;
+    }
+    .result {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 4px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Upload Song for Karaoke</h1>
+    <form id="uploadForm" enctype="multipart/form-data">
+      <label for="file">Select File (MP4):</label>
+      <input type="file" id="file" name="file" accept="video/mp4" required>
+      
+      <label for="title">Song Title:</label>
+      <input type="text" id="title" name="title" placeholder="Enter song title" required>
+      
+      <label for="artists">Artists:</label>
+      <input type="text" id="artists" name="artists" placeholder="Enter artists" required>
+      
+      <button type="submit">Upload and Process</button>
+    </form>
+    <div id="result" class="result"></div>
+  </div>
+
+  <script>
+    // เมื่อเลือกไฟล์แล้ว ให้แยกชื่อไฟล์ตามเครื่องหมาย "-" และใส่ค่าใน title กับ artists
+    document.getElementById('file').addEventListener('change', function(e) {
+      const file = this.files[0];
+      if (!file) return;
+      let fileName = file.name;
+      // ลบนามสกุลออก (เช่น .mp4)
+      fileName = fileName.replace(/\.[^/.]+$/, "");
+      const parts = fileName.split('-');
+      if (parts.length >= 2) {
+        document.getElementById('title').value = parts[0].trim();
+        document.getElementById('artists').value = parts[1].trim();
+      }
+    });
+
+    document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const formData = new FormData();
+      const fileInput = document.getElementById('file');
+      const titleInput = document.getElementById('title');
+      const artistsInput = document.getElementById('artists');
+      
+      formData.append('file', fileInput.files[0]);
+      formData.append('title', titleInput.value);
+      formData.append('artists', artistsInput.value);
+      
+      try {
+        const response = await fetch('/upload', {
+          method: 'POST',
+          body: formData
+        });
+        const resultDiv = document.getElementById('result');
+        if (!response.ok) {
+          const errorData = await response.json();
+          resultDiv.style.display = 'block';
+          resultDiv.style.backgroundColor = '#f8d7da';
+          resultDiv.style.color = '#721c24';
+          resultDiv.innerHTML = `<strong>Error:</strong> ${errorData.error}`;
+        } else {
+          const data = await response.json();
+          resultDiv.style.display = 'block';
+          resultDiv.style.backgroundColor = '#d4edda';
+          resultDiv.style.color = '#155724';
+          resultDiv.innerHTML = `<strong>Processing complete!</strong><br>
+            Output Video: ${data.outputVideo}<br>
+            Output ASS: ${data.outputASS}<br>
+            Output Folder: ${data.outputFolder}`;
+        }
+      } catch (err) {
+        const resultDiv = document.getElementById('result');
+        resultDiv.style.display = 'block';
+        resultDiv.style.backgroundColor = '#f8d7da';
+        resultDiv.style.color = '#721c24';
+        resultDiv.textContent = 'Error: ' + err;
+      }
+    });
+  </script>
+</body>
+</html>
