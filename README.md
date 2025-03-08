@@ -100,7 +100,7 @@ if len(sys.argv) < 2:
     sys.exit(1)
 
 audio_file = sys.argv[1]
-model = whisper.load_model("base")  # สามารถเปลี่ยนเป็น "small", "medium" หรือ "large" ได้
+model = whisper.load_model("base")  # สามารถเปลี่ยนเป็น "small" เครื่องไม่แรงมาก, "medium" เครื่องพอประมาณ หรือ "large" เครื่องแรงสุดๆใช้เวลา render พอควรแต่แม่นนะ ได้
 result = model.transcribe(audio_file, fp16=False)
 segments = result.get("segments", [])
 print(json.dumps(segments, ensure_ascii=False))
