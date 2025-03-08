@@ -103,7 +103,7 @@
       formData.append('artists', artistsInput.value);
       
       try {
-        const response = await fetch('/upload', {
+        const response = await fetch('http://localhost:3000/upload', {
           method: 'POST',
           body: formData
         });
