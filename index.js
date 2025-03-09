@@ -102,7 +102,6 @@ async function removeVocals(inputAudio, outputInstrumental) {
 
 /**
  * รวมไฟล์วีดีโอกับแทร็กเสียงสองแทร็ก (เสียงเต็มและ instrumental)
- * เพิ่ม metadata title และ artist ลงในไฟล์วีดีโอด้วย
  */
 async function combineAudioTracks(mp4File, originalAudio, instrumentalAudio, outputMp4, metadata) {
   return new Promise((resolve, reject) => {
@@ -118,6 +117,7 @@ async function combineAudioTracks(mp4File, originalAudio, instrumentalAudio, out
         '-c:a aac',
         '-shortest'
       ]);
+    // หากต้องการเพิ่ม metadata title และ artist สามารถ uncomment บรรทัดด้านล่างได้
     // if (metadata && metadata.title && metadata.artists) {
     //   ff = ff.outputOptions([
     //     `-metadata title=${metadata.title}`,
@@ -134,6 +134,38 @@ async function combineAudioTracks(mp4File, originalAudio, instrumentalAudio, out
         reject(err);
       })
       .run();
+  });
+}
+
+/**
+ * Embed subtitles (.ass) into MP4 โดย burn-in subtitles ด้วย ffmpeg filter "ass"
+ */
+// ฟังก์ชันสำหรับ escape path สำหรับ ffmpeg บน Windows
+function escapeForSubtitles(filePath) {
+  // แปลงให้เป็นแบบ Unix-style ด้วย forward slashes
+  let newPath = filePath.split(path.sep).join('/');
+  // สำหรับ Windows ให้แทนที่ "E:" ด้วย "E\\:" เพื่อ escape colon
+  newPath = newPath.replace(/^([A-Za-z]):/, "$1\\:");
+  return newPath;
+}
+
+function embedSubtitlesExec(inputMp4, assFile, outputFinalMp4) {
+  return new Promise((resolve, reject) => {
+    // สมมติว่า inputMp4, assFile, outputFinalMp4 เป็น full paths
+    const input = inputMp4;
+    const escapedAssFile = escapeForSubtitles(assFile);
+    const output = outputFinalMp4;
+    // สร้างคำสั่งโดยใช้ filter subtitles (ไม่มีเครื่องหมายคำพูดซ้อนภายใน filter)
+    const cmd = `ffmpeg -y -i "${input}" -vf "subtitles='${escapedAssFile}'" -map 0 -c:v libx264 -c:a copy "${output}"`;
+    console.log("Executing command:", cmd);
+    exec(cmd, (error, stdout, stderr) => {
+      if (error) {
+        console.error("Error embedding subtitles using exec:", error);
+        return reject(error);
+      }
+      console.log("Embedded subtitles into MP4 using exec:", output);
+      resolve();
+    });
   });
 }
 
@@ -185,6 +217,8 @@ function createASSDialogue(startTime, endTime, words) {
  */
 function generateASSfromAudioWhisper(audioFile, outputASS) {
   return new Promise((resolve, reject) => {
+    const startTime = Date.now(); // เริ่มจับเวลา
+    console.log(`Starting transcription: python whisper_transcribe.py "${audioFile}"`);
     exec(`python whisper_transcribe.py "${audioFile}"`, (error, stdout, stderr) => {
       if (error) {
         console.error("Error transcribing with Whisper:", error);
@@ -194,18 +228,20 @@ function generateASSfromAudioWhisper(audioFile, outputASS) {
         const segments = JSON.parse(stdout);
         let assContent = createASSHeader();
         segments.forEach(segment => {
-          const startTime = segment.start;
+          const startTimeSegment = segment.start;
           const endTime = segment.end;
           // แบ่งข้อความใน segment ออกเป็นคำ แล้วแจกจ่ายเวลาเท่า ๆ กัน
           const wordsArray = segment.text.split(/\s+/).filter(w => w.length > 0);
-          const totalDuration = Math.round((endTime - startTime) * 100);
+          const totalDuration = Math.round((endTime - startTimeSegment) * 100);
           const perWordDuration = wordsArray.length > 0 ? Math.floor(totalDuration / wordsArray.length) : 10;
           const wordsKaraoke = wordsArray.map(word => ({ duration: perWordDuration, text: word }));
-          const dialogueLine = createASSDialogue(startTime, endTime, wordsKaraoke);
+          const dialogueLine = createASSDialogue(startTimeSegment, endTime, wordsKaraoke);
           assContent += dialogueLine + "\n";
         });
         fs.writeFileSync(outputASS, assContent, 'utf8');
+        const elapsed = (Date.now() - startTime) / 1000;
         console.log("Generated ASS file using Whisper at:", outputASS);
+        console.log(`Transcription and ASS generation took ${elapsed} seconds.`);
         resolve();
       } catch (e) {
         console.error("Error processing transcription output:", e);
@@ -215,10 +251,32 @@ function generateASSfromAudioWhisper(audioFile, outputASS) {
   });
 }
 
+
+function generateASSfromAudioWav2Vec2(audioFile, outputASS) {
+  return new Promise((resolve, reject) => {
+    // เรียก Python script และ redirect output ไปยังไฟล์ outputASS
+    exec(`python generate_ass_wav2vec2.py "${audioFile}" > "${outputASS}"`, (error, stdout, stderr) => {
+      if (error) {
+        console.error("Error generating ASS with Wav2Vec2:", error);
+        return reject(error);
+      }
+      console.log("Generated ASS file using Wav2Vec2 at:", outputASS);
+      resolve();
+    });
+  });
+}
+
 /**
  * ฟังก์ชันหลักสำหรับประมวลผลสร้าง MP4 แบบ dual audio พร้อม ASS karaoke
  * รับพารามิเตอร์เพิ่มเติม title กับ artists เพื่อใช้ในการตั้งชื่อไฟล์และ metadata
  */
+// ฟังก์ชันสำหรับ sanitize ชื่อไฟล์ให้เหลือตัวอักษร ASCII เท่านั้น
+function sanitizeFileName(name) {
+  // ลบตัวอักษรที่ไม่ใช่ ASCII ออก
+  return name.replace(/[^\x00-\x7F]/g, '');
+}
+
+// ใน processKaraoke ให้ปรับแก้ baseName เป็นแบบ sanitized
 async function processKaraoke(mp4File, title, artists) {
   try {
     const outputFolder = createNewOutputFolder();
@@ -227,10 +285,14 @@ async function processKaraoke(mp4File, title, artists) {
     const originalAudioFile = path.join(outputFolder, 'original_audio.wav');
     const instrumentalAudioFile = path.join(outputFolder, 'instrumental_audio.wav');
     const compressedAudioFile = path.join(outputFolder, 'compressed_audio.wav');
-    // ใช้ชื่อไฟล์ output จาก title กับ artists (เช่น "MySong-Artist.mp4")
-    const baseName = `${title}-${artists}`.replace(/\s+/g, '');
+    // สร้าง baseName จาก title กับ artists แล้ว sanitize
+    //const rawBaseName = `${title}-${artists}`;
+    const rawBaseName = `music`;
+    const baseName = sanitizeFileName(rawBaseName);
+   // const baseName = sanitizeFileName(rawBaseName).replace(/\s+/g, '');
     const outputMp4 = path.join(outputFolder, `${baseName}.mp4`);
     const outputASS = path.join(outputFolder, `${baseName}.ass`);
+    const finalMp4 = path.join(outputFolder, `${baseName}-final.mp4`);
 
     // ขั้นตอนต่าง ๆ
     await extractAudio(mp4File, originalAudioFile);
@@ -238,9 +300,11 @@ async function processKaraoke(mp4File, title, artists) {
     await removeVocals(originalAudioFile, instrumentalAudioFile);
     await combineAudioTracks(mp4File, originalAudioFile, instrumentalAudioFile, outputMp4, { title, artists });
     await generateASSfromAudioWhisper(compressedAudioFile, outputASS);
+    // รวมไฟล์ .ass เข้ากับ MP4 โดย burn-in subtitles
+    await embedSubtitlesExec(outputMp4, outputASS, finalMp4);
 
-    console.log('กระบวนการสร้างไฟล์ MP4 แบบ dual audio และ ASS karaoke เสร็จสิ้น');
-    return { outputMp4, outputASS, outputFolder };
+    console.log('กระบวนการสร้างไฟล์ MP4 แบบ dual audio, ASS karaoke และ embedding subtitles เสร็จสิ้น');
+    return { outputVideo: finalMp4, outputASS, outputFolder };
   } catch (err) {
     console.error('Error during processing:', err);
     throw err;
@@ -261,7 +325,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     const result = await processKaraoke(filePath, title, artists);
     res.json({
       message: 'Processing complete',
-      outputVideo: result.outputMp4,
+      outputVideo: result.outputVideo,
       outputASS: result.outputASS,
       outputFolder: result.outputFolder
     });
