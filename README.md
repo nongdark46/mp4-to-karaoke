@@ -156,3 +156,59 @@ node index.js
 - **Python Modules**: ตรวจสอบว่าติดตั้ง `openai-whisper` และ `spleeter` แล้ว
 - **Build Tools**: หากเกิดปัญหาในการ build Python modules (เช่น Spleeter) ให้ตรวจสอบ Visual Studio Build Tools และ environment variables
 - **File Naming**: ตรวจสอบชื่อไฟล์ที่อัปโหลดให้แน่ใจว่าใช้เครื่องหมาย "-" ในการแบ่ง title และ artists
+
+```markdown
+# การติดตั้ง CUDA สำหรับการเร่งความเร็วด้วย GPU
+
+เพื่อเพิ่มประสิทธิภาพของโปรเจคด้วย GPU โดยเฉพาะอย่างยิ่งในการทำ inference ด้วย OpenAI Whisper หรือโมเดล deep learning อื่น ๆ คุณจำเป็นต้องติดตั้ง NVIDIA CUDA Toolkit และตรวจสอบว่า GPU ของคุณรองรับ CUDA โดยทำตามขั้นตอนต่อไปนี้:
+
+## ขั้นตอนการติดตั้ง
+
+### 1. ตรวจสอบการรองรับ CUDA ของ GPU
+
+- เปิด Command Prompt และรันคำสั่งต่อไปนี้:
+
+  ```bash
+  nvidia-smi
+  ```
+
+  หากคำสั่งนี้แสดงรายละเอียดเกี่ยวกับ GPU ของคุณ แสดงว่าคุณมี NVIDIA GPU ที่รองรับ CUDA
+
+### 2. ดาวน์โหลดและติดตั้ง CUDA Toolkit
+
+- เข้าไปที่เว็บไซต์ [NVIDIA CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit) และดาวน์โหลดเวอร์ชันที่ตรงกับระบบของคุณ (แนะนำให้เลือกเวอร์ชันที่ PyTorch รองรับ เช่น CUDA 11.x)
+- ทำการติดตั้งตามขั้นตอนที่ NVIDIA แนะนำ
+
+### 3. ติดตั้ง NVIDIA Drivers
+
+- ตรวจสอบให้แน่ใจว่าคุณได้ติดตั้ง NVIDIA Drivers เวอร์ชันล่าสุดที่รองรับ GPU ของคุณ สามารถดาวน์โหลดได้จาก [NVIDIA Drivers Download](https://www.nvidia.com/Download/index.aspx)
+
+### 4. ติดตั้ง PyTorch ด้วย CUDA Support
+
+- เมื่อติดตั้ง CUDA Toolkit เสร็จแล้ว ให้ติดตั้ง PyTorch ที่รองรับ CUDA โดยปฏิบัติตามคำแนะนำที่ [PyTorch Get Started](https://pytorch.org/get-started/locally/)
+- เลือกเวอร์ชันที่ตรงกับ CUDA Toolkit ที่คุณติดตั้ง ตัวอย่างเช่น สำหรับ CUDA 11.8 ให้ใช้คำสั่ง:
+
+  ```bash
+  pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu118
+  ```
+
+### 5. ตรวจสอบการติดตั้ง
+
+- รันสคริปต์ Python ต่อไปนี้เพื่อตรวจสอบว่า PyTorch ตรวจพบ GPU ได้หรือไม่:
+
+  ```python
+  import torch
+  print(torch.cuda.is_available())
+  ```
+
+  หากได้ผลลัพธ์เป็น `True` หมายความว่าการติดตั้งสำเร็จและ GPU ของคุณพร้อมใช้งาน
+
+## บทสรุป
+
+การติดตั้ง CUDA ช่วยให้โปรเจคของคุณทำงานด้วย GPU ได้รวดเร็วกว่าเมื่อใช้ CPU เพียงอย่างเดียว โดยเฉพาะในงานที่ต้องการการประมวลผลโมเดล deep learning ที่ซับซ้อน
+
+## การแก้ไขปัญหา
+
+- ตรวจสอบว่าเส้นทางระบบของคุณมีไบนารีของ CUDA และ cuDNN
+- หาก GPU ไม่ถูกตรวจพบ ให้ตรวจสอบไดร์เวอร์และอัปเดตหากจำเป็น
+- ดูเอกสารเพิ่มเติมจาก PyTorch และ CUDA สำหรับคำแนะนำเพิ่มเติม
